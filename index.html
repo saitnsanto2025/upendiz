@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Import CSV Files</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      color: #1f2937;
+    }
+
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      color: #111827;
+    }
+
+    p.subtitle {
+      margin: 0 0 24px;
+      color: #6b7280;
+      font-size: 15px;
+    }
+
+    .field {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    input[type="text"],
+    input[type="file"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    input[type="file"] {
+      padding: 10px;
+    }
+
+    .file-list {
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 10px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      font-size: 14px;
+      color: #374151;
+    }
+
+    .file-list div {
+      margin-bottom: 6px;
+    }
+
+    .file-list div:last-child {
+      margin-bottom: 0;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    button:disabled {
+      background: #93c5fd;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 18px;
+      padding: 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      display: none;
+      white-space: pre-wrap;
+    }
+
+    .status.success {
+      display: block;
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .status.error {
+      display: block;
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .status.info {
+      display: block;
+      background: #eff6ff;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+
+    .note {
+      margin-top: 20px;
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 14px;
+      }
+
+      .container {
+        padding: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Import CSV Files</h1>
+    <p class="subtitle">Upload one or more CSV files and submit them to your n8n workflow.</p>
+
+    <form id="csvForm">
+      <div class="field">
+        <label for="folderName">Folder Name</label>
+        <input
+          type="text"
+          id="folderName"
+          name="folderName"
+          placeholder="Optional: enter a folder name"
+        />
+      </div>
+
+      <div class="field">
+        <label for="csvFiles">Choose CSV Files</label>
+        <input
+          type="file"
+          id="csvFiles"
+          name="csvFiles"
+          accept=".csv,text/csv"
+          multiple
+          required
+        />
+        <div id="fileList" class="file-list" style="display:none;"></div>
+      </div>
+
+      <button type="submit" id="submitBtn">Upload CSV Files</button>
+    </form>
+
+    <div id="statusBox" class="status"></div>
+
+    <div class="note">
+      Update the webhook URL in the script before testing.
+    </div>
+  </div>
+
+  <script>
+    const WEBHOOK_URL = "https://l3j2qk3a.rcsrv.net/webhook/maima";
+
+    const form = document.getElementById("csvForm");
+    const fileInput = document.getElementById("csvFiles");
+    const fileList = document.getElementById("fileList");
+    const statusBox = document.getElementById("statusBox");
+    const submitBtn = document.getElementById("submitBtn");
+
+    fileInput.addEventListener("change", () => {
+      const files = Array.from(fileInput.files || []);
+
+      if (!files.length) {
+        fileList.style.display = "none";
+        fileList.innerHTML = "";
+        return;
+      }
+
+      fileList.style.display = "block";
+      fileList.innerHTML = files
+        .map(
+          (file, index) =>
+            `<div><strong>${index + 1}.</strong> ${escapeHtml(file.name)} (${formatFileSize(file.size)})</div>`
+        )
+        .join("");
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const files = Array.from(fileInput.files || []);
+      const folderName = document.getElementById("folderName").value.trim();
+
+      if (!files.length) {
+        showStatus("Please select at least one CSV file.", "error");
+        return;
+      }
+
+      const formData = new FormData();
+
+      if (folderName) {
+        formData.append("folderName", folderName);
+      }
+
+      files.forEach((file) => {
+        formData.append("csvFiles", file);
+      });
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Uploading...";
+      showStatus("Uploading files, please wait...", "info");
+
+      try {
+        const response = await fetch(WEBHOOK_URL, {
+          method: "POST",
+          body: formData,
+        });
+
+        const text = await response.text();
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${text}`);
+        }
+
+        let resultText = text;
+        try {
+          const json = JSON.parse(text);
+          resultText = JSON.stringify(json, null, 2);
+        } catch {
+          // Keep plain text response
+        }
+
+        showStatus("Upload successful.\n\nResponse:\n" + resultText, "success");
+        form.reset();
+        fileList.style.display = "none";
+        fileList.innerHTML = "";
+      } catch (error) {
+        showStatus("Upload failed.\n\n" + error.message, "error");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Upload CSV Files";
+      }
+    });
+
+    function showStatus(message, type) {
+      statusBox.className = `status ${type}`;
+      statusBox.textContent = message;
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html> 
